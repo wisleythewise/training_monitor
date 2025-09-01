@@ -6,6 +6,13 @@ const path = require('path');
 const execPromise = util.promisify(exec);
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
+// Cache for API responses
+const cache = {
+  hf_models: { data: null, timestamp: 0 },
+  hf_datasets: { data: null, timestamp: 0 }
+};
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -52,6 +59,13 @@ async function getWandbProjects() {
 
 async function getHuggingFaceModels() {
   try {
+    // Check cache first
+    const now = Date.now();
+    if (cache.hf_models.data && (now - cache.hf_models.timestamp) < CACHE_DURATION) {
+      console.log('Returning cached HF models');
+      return cache.hf_models.data;
+    }
+
     const hfToken = process.env.HUGGINGFACE_TOKEN;
     const scriptPath = path.join(__dirname, '..', 'scripts', 'get_hf_models.py');
     const workingDir = path.join(__dirname, '..');
@@ -60,15 +74,27 @@ async function getHuggingFaceModels() {
     const { stdout, stderr } = await execPromise(`HUGGINGFACE_TOKEN="${hfToken}" ${pythonPath} "${scriptPath}"`, { cwd: workingDir });
     if (stderr) console.error('HF Models stderr:', stderr);
     console.log('HF Models stdout length:', stdout.length);
-    return JSON.parse(stdout);
+    
+    const data = JSON.parse(stdout);
+    // Update cache
+    cache.hf_models = { data, timestamp: now };
+    return data;
   } catch (error) {
     console.error('Error fetching HuggingFace models:', error.message);
-    return [];
+    // Return cached data if available, otherwise empty array
+    return cache.hf_models.data || [];
   }
 }
 
 async function getHuggingFaceDatasets() {
   try {
+    // Check cache first
+    const now = Date.now();
+    if (cache.hf_datasets.data && (now - cache.hf_datasets.timestamp) < CACHE_DURATION) {
+      console.log('Returning cached HF datasets');
+      return cache.hf_datasets.data;
+    }
+
     const hfToken = process.env.HUGGINGFACE_TOKEN;
     const scriptPath = path.join(__dirname, '..', 'scripts', 'get_hf_datasets.py');
     const workingDir = path.join(__dirname, '..');
@@ -77,10 +103,15 @@ async function getHuggingFaceDatasets() {
     const { stdout, stderr } = await execPromise(`HUGGINGFACE_TOKEN="${hfToken}" ${pythonPath} "${scriptPath}"`, { cwd: workingDir });
     if (stderr) console.error('HF Datasets stderr:', stderr);
     console.log('HF Datasets stdout length:', stdout.length);
-    return JSON.parse(stdout);
+    
+    const data = JSON.parse(stdout);
+    // Update cache
+    cache.hf_datasets = { data, timestamp: now };
+    return data;
   } catch (error) {
     console.error('Error fetching HuggingFace datasets:', error.message);
-    return [];
+    // Return cached data if available, otherwise empty array
+    return cache.hf_datasets.data || [];
   }
 }
 

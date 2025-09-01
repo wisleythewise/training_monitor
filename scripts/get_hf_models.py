@@ -2,36 +2,45 @@ import json
 import sys
 import os
 
+# Load .env file manually from parent directory
+env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+if os.path.exists(env_path):
+    with open(env_path, 'r') as f:
+        for line in f:
+            if '=' in line and not line.strip().startswith('#'):
+                key, value = line.strip().split('=', 1)
+                os.environ[key] = value
+
 try:
-    from huggingface_hub import HfApi
+    from huggingface_hub import list_models, HfApi
     
-    # Get token from environment variable
-    token = os.environ.get('HUGGINGFACE_TOKEN', '')
+    # Get HF token from environment or use default (public access)
+    token = os.getenv('HF_TOKEN') or os.getenv('HUGGINGFACE_TOKEN')
+    api = HfApi(token=token)
+    
+    # Get current user's models if token is available
     if token:
-        api = HfApi(token=token)
-        user_info = api.whoami()
-        username = user_info['name']
-        
-        # List all models from the user's account
-        models = api.list_models(author=username)
-        
-        model_list = []
-        for model in models:
-            model_list.append({
-                "name": model.modelId,
-                "private": model.private,
-                "lastModified": str(model.lastModified) if model.lastModified else "",
-                "downloads": model.downloads if hasattr(model, 'downloads') else 0,
-                "likes": model.likes if hasattr(model, 'likes') else 0,
-                "tags": model.tags if hasattr(model, 'tags') else []
-            })
-        
-        print(json.dumps(model_list))
+        try:
+            user_info = api.whoami()
+            username = user_info['name']
+            models_iter = list_models(author=username, token=token)
+        except Exception:
+            # Fallback to listing popular models if user fetch fails
+            models_iter = list_models(limit=50, sort="downloads", direction=-1)
     else:
-        print("[]", file=sys.stderr)
-        print("No HUGGINGFACE_TOKEN found", file=sys.stderr)
-        print("[]")
-        
+        # No token - list popular public models
+        models_iter = list_models(limit=50, sort="downloads", direction=-1)
+    
+    models = []
+    for model in models_iter:
+        models.append({
+            "name": model.modelId,
+            "downloads": getattr(model, 'downloads', 0),
+            "lastModified": model.lastModified.isoformat() if model.lastModified else None,
+            "tags": getattr(model, 'tags', [])
+        })
+    
+    print(json.dumps(models))
 except ImportError as e:
     print("[]", file=sys.stderr)
     print("ImportError:", e, file=sys.stderr)

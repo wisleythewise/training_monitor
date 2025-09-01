@@ -2,36 +2,45 @@ import json
 import sys
 import os
 
+# Load .env file manually from parent directory
+env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+if os.path.exists(env_path):
+    with open(env_path, 'r') as f:
+        for line in f:
+            if '=' in line and not line.strip().startswith('#'):
+                key, value = line.strip().split('=', 1)
+                os.environ[key] = value
+
 try:
-    from huggingface_hub import HfApi
+    from huggingface_hub import list_datasets, HfApi
     
-    # Get token from environment variable
-    token = os.environ.get('HUGGINGFACE_TOKEN', '')
+    # Get HF token from environment or use default (public access)
+    token = os.getenv('HF_TOKEN') or os.getenv('HUGGINGFACE_TOKEN')
+    api = HfApi(token=token)
+    
+    # Get current user's datasets if token is available
     if token:
-        api = HfApi(token=token)
-        user_info = api.whoami()
-        username = user_info['name']
-        
-        # List all datasets from the user's account
-        datasets = api.list_datasets(author=username)
-        
-        dataset_list = []
-        for dataset in datasets:
-            dataset_list.append({
-                "name": dataset.id,
-                "private": dataset.private,
-                "lastModified": str(dataset.lastModified) if dataset.lastModified else "",
-                "downloads": dataset.downloads if hasattr(dataset, 'downloads') else 0,
-                "likes": dataset.likes if hasattr(dataset, 'likes') else 0,
-                "tags": dataset.tags if hasattr(dataset, 'tags') else []
-            })
-        
-        print(json.dumps(dataset_list))
+        try:
+            user_info = api.whoami()
+            username = user_info['name']
+            datasets_iter = list_datasets(author=username, token=token)
+        except Exception:
+            # Fallback to listing popular datasets if user fetch fails
+            datasets_iter = list_datasets(limit=50, sort="downloads", direction=-1)
     else:
-        print("[]", file=sys.stderr)
-        print("No HUGGINGFACE_TOKEN found", file=sys.stderr)
-        print("[]")
-        
+        # No token - list popular public datasets
+        datasets_iter = list_datasets(limit=50, sort="downloads", direction=-1)
+    
+    datasets = []
+    for dataset in datasets_iter:
+        datasets.append({
+            "name": dataset.id,
+            "downloads": getattr(dataset, 'downloads', 0),
+            "lastModified": dataset.lastModified.isoformat() if dataset.lastModified else None,
+            "tags": getattr(dataset, 'tags', [])
+        })
+    
+    print(json.dumps(datasets))
 except ImportError as e:
     print("[]", file=sys.stderr)
     print("ImportError:", e, file=sys.stderr)
