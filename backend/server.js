@@ -4,7 +4,7 @@ const { exec } = require('child_process');
 const util = require('util');
 const path = require('path');
 const execPromise = util.promisify(exec);
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -18,7 +18,7 @@ async function getWandbRuns(projectFilter = null) {
     const scriptPath = path.join(__dirname, '..', 'scripts', 'get_wandb_runs.py');
     const projectArg = projectFilter ? `"${projectFilter}"` : '';
     const workingDir = path.join(__dirname, '..');
-    const pythonPath = '/home/jasper/miniconda3/envs/lerobot/bin/python3';
+    const pythonPath = path.join(__dirname, '..', 'venv', 'bin', 'python3');
     
     console.log('Wandb: Executing with project filter:', projectFilter);
     const { stdout, stderr } = await execPromise(`WANDB_API_KEY="${wandbApiKey}" ${pythonPath} "${scriptPath}" ${projectArg}`, { cwd: workingDir });
@@ -36,23 +36,28 @@ async function getWandbProjects() {
     const wandbApiKey = process.env.WANDB_API_KEY;
     const scriptPath = path.join(__dirname, '..', 'scripts', 'get_wandb_projects.py');
     const workingDir = path.join(__dirname, '..');
-    const pythonPath = '/home/jasper/miniconda3/envs/lerobot/bin/python3';
+    const pythonPath = path.join(__dirname, '..', 'venv', 'bin', 'python3');
     
-    const { stdout } = await execPromise(`WANDB_API_KEY="${wandbApiKey}" ${pythonPath} "${scriptPath}"`, { cwd: workingDir });
+    console.log('Fetching Wandb projects with command:', `WANDB_API_KEY="${wandbApiKey}" ${pythonPath} "${scriptPath}"`);
+    const { stdout, stderr } = await execPromise(`WANDB_API_KEY="${wandbApiKey}" ${pythonPath} "${scriptPath}"`, { cwd: workingDir });
+    if (stderr) console.error('Wandb projects stderr:', stderr);
+    console.log('Wandb projects stdout:', stdout);
     return JSON.parse(stdout);
   } catch (error) {
     console.error('Error fetching Wandb projects:', error.message);
+    console.error('Full error:', error);
     return [];
   }
 }
 
 async function getHuggingFaceModels() {
   try {
+    const hfToken = process.env.HUGGINGFACE_TOKEN;
     const scriptPath = path.join(__dirname, '..', 'scripts', 'get_hf_models.py');
     const workingDir = path.join(__dirname, '..');
-    const pythonPath = '/home/jasper/miniconda3/envs/lerobot/bin/python3';
-    console.log('Executing:', `${pythonPath} "${scriptPath}"`, 'in', workingDir);
-    const { stdout, stderr } = await execPromise(`${pythonPath} "${scriptPath}"`, { cwd: workingDir });
+    const pythonPath = path.join(__dirname, '..', 'venv', 'bin', 'python3');
+    console.log('Executing HF models fetch with token');
+    const { stdout, stderr } = await execPromise(`HUGGINGFACE_TOKEN="${hfToken}" ${pythonPath} "${scriptPath}"`, { cwd: workingDir });
     if (stderr) console.error('HF Models stderr:', stderr);
     console.log('HF Models stdout length:', stdout.length);
     return JSON.parse(stdout);
@@ -64,10 +69,14 @@ async function getHuggingFaceModels() {
 
 async function getHuggingFaceDatasets() {
   try {
+    const hfToken = process.env.HUGGINGFACE_TOKEN;
     const scriptPath = path.join(__dirname, '..', 'scripts', 'get_hf_datasets.py');
     const workingDir = path.join(__dirname, '..');
-    const pythonPath = '/home/jasper/miniconda3/envs/lerobot/bin/python3';
-    const { stdout } = await execPromise(`${pythonPath} "${scriptPath}"`, { cwd: workingDir });
+    const pythonPath = path.join(__dirname, '..', 'venv', 'bin', 'python3');
+    console.log('Executing HF datasets fetch with token');
+    const { stdout, stderr } = await execPromise(`HUGGINGFACE_TOKEN="${hfToken}" ${pythonPath} "${scriptPath}"`, { cwd: workingDir });
+    if (stderr) console.error('HF Datasets stderr:', stderr);
+    console.log('HF Datasets stdout length:', stdout.length);
     return JSON.parse(stdout);
   } catch (error) {
     console.error('Error fetching HuggingFace datasets:', error.message);

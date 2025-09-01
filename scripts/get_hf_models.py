@@ -1,17 +1,37 @@
 import json
 import sys
+import os
+
 try:
-    from huggingface_hub import scan_cache_dir
-    cache_info = scan_cache_dir()
-    models = []
-    for repo in cache_info.repos:
-        if repo.repo_type == "model":
-            models.append({
-                "name": repo.repo_id,
-                "size": str(repo.size_on_disk),
-                "lastModified": str(repo.last_modified)
+    from huggingface_hub import HfApi
+    
+    # Get token from environment variable
+    token = os.environ.get('HUGGINGFACE_TOKEN', '')
+    if token:
+        api = HfApi(token=token)
+        user_info = api.whoami()
+        username = user_info['name']
+        
+        # List all models from the user's account
+        models = api.list_models(author=username)
+        
+        model_list = []
+        for model in models:
+            model_list.append({
+                "name": model.modelId,
+                "private": model.private,
+                "lastModified": str(model.lastModified) if model.lastModified else "",
+                "downloads": model.downloads if hasattr(model, 'downloads') else 0,
+                "likes": model.likes if hasattr(model, 'likes') else 0,
+                "tags": model.tags if hasattr(model, 'tags') else []
             })
-    print(json.dumps(models))
+        
+        print(json.dumps(model_list))
+    else:
+        print("[]", file=sys.stderr)
+        print("No HUGGINGFACE_TOKEN found", file=sys.stderr)
+        print("[]")
+        
 except ImportError as e:
     print("[]", file=sys.stderr)
     print("ImportError:", e, file=sys.stderr)
